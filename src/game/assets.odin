@@ -25,6 +25,7 @@ assets_init :: proc() {
     if shaman_textr.id <= 0 do panic("invalid path: " + SHAMAN_PATH)
 }
 
+// Tiles
 tile_spiritOffsetX:f32 = 32.0
 grass_tile_positions := [?]rl.Rectangle{
     { 0,  0, 16, 16},
@@ -45,3 +46,8 @@ water_tile_positions := [?]rl.Rectangle{
     {16, 16, 16, 16},
     {16, 32, 16, 16},
 }
+
+// Shaman
+shaman_spiritOffsetX: f32 = 16.0
+shaman_sprite_position  := rl.Rectangle{ 0, 0, 16, 27}
+shaman_sprite_origin    := Vec2{0, -3}

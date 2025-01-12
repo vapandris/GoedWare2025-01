@@ -3,9 +3,12 @@ package game
 
 import rl "../../raylib"
 
+game_should_exit := false
+
 @(export)
 game_init :: proc() {
 	g_state = new(GameState)
+	rl.SetExitKey(.KEY_NULL)
 
 	init()
 
@@ -21,5 +24,5 @@ game_destroy :: proc() {
 game_frame :: proc() -> bool {
 	update()
 	draw()
-	return !rl.WindowShouldClose()
+	return !rl.WindowShouldClose() && !game_should_exit
 }
