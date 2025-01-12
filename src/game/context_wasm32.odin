@@ -13,6 +13,8 @@ temp_arena: mem.Arena
 
 wasm_context: runtime.Context
 
+game_should_exit := false
+
 create_wasm_context :: proc "contextless" () {
 	context = runtime.default_context()
 	mem.arena_init(&temp_arena, temp_arena_backing[:])
