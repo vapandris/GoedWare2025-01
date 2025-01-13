@@ -3,6 +3,8 @@ package game
 import rl "../../raylib"
 import "core:time"
 
+ORANGE :: rl.Color{244, 96, 54, 255}
+
 RESOLUTION_HEIGHT: f32 : 180
 RESOLUTION_WIDTH : f32 : 320
 
@@ -20,6 +22,7 @@ GameState :: struct {
     player_hitbox: Vec4,
     camera: rl.Camera2D,
     spirit_mode_on: bool,
+    spirits_should_attack: bool,
 }
 
 GameplayState :: enum {
@@ -76,6 +79,8 @@ update :: proc() {
                     if rl.IsKeyDown(.D) do g_state.player_hitbox.x += 100 * dt
                     if rl.IsKeyDown(.A) do g_state.player_hitbox.x -= 100 * dt
                     if rl.IsKeyPressed(.ESCAPE) do g_state.menu_state = .Paused
+
+                    g_state.spirits_should_attack = g_state.player_hitbox.y <= 800
                 
                     g_state.camera.target.x = g_state.player_hitbox.x
                     g_state.camera.target.y = g_state.player_hitbox.y
@@ -83,11 +88,13 @@ update :: proc() {
                 case .IntroText: {
                     // If stopwatch is started will do nothing.
                     time.stopwatch_start(&stopwatch)
-                    fmt.println(time.stopwatch_duration(stopwatch))
 
-                    if time.stopwatch_duration(stopwatch) >= time.Duration(5 * time.Second) {
-                        g_state.gameplay_state = .Gameplay
-                        time.stopwatch_reset(&stopwatch)
+                    // After a few seconds allow to skip
+                    if time.stopwatch_duration(stopwatch) >= time.Duration(13 * time.Second) {
+                        if rl.IsKeyPressed(.SPACE) {
+                            g_state.gameplay_state = .Gameplay
+                            time.stopwatch_reset(&stopwatch)
+                        }
                     }
                 }
                 case .PauseForText: {
@@ -182,6 +189,15 @@ draw :: proc() {
                     }
                 }
                 case .IntroText: {
+                    if time.stopwatch_duration(stopwatch) >= time.Duration( 1 * time.Second) do rl.DrawText("Lately.. the spirits have gone crazy. The whole world has.", 50, 70, 32,  ORANGE)
+                    if time.stopwatch_duration(stopwatch) >= time.Duration( 4 * time.Second) do rl.DrawText("They started attacking people. This can't keep up.",         50, 120, 32, ORANGE)
+                    if time.stopwatch_duration(stopwatch) >= time.Duration( 7 * time.Second) do rl.DrawText("I swore to keep the balance between our world and spirits.",    50, 170, 32, ORANGE)
+                    if time.stopwatch_duration(stopwatch) >= time.Duration(10 * time.Second) do rl.DrawText("But now I have no option. I must protect the humans.",       50, 220, 32, ORANGE)
+                    
+                    // After a few seconds notice to skip
+                    if time.stopwatch_duration(stopwatch) >= time.Duration(13 * time.Second) {
+                        rl.DrawText("Press [space] to continue", 100, 270, 32, rl.WHITE)
+                    }
                     
                 }
             }
@@ -191,7 +207,7 @@ draw :: proc() {
 
                 rl.DrawText("Unpause with [Esc]", 10, 10, 32, rl.WHITE)
                 rl.DrawText("Exit with [Q]\n",    10, 50, 32, rl.WHITE)
-            } else {
+            } else if g_state.gameplay_state == .Gameplay{
                 rl.DrawText("Pause with [Esc]", 10, 10, 32, rl.WHITE)
             }
         }
