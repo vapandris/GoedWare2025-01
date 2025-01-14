@@ -20,7 +20,11 @@ GameState :: struct {
     gameplay_state: GameplayState,
 
     player_hitbox: Vec4,
+    player_to_mouse_dir: Vec2,
+    player_dash_dir: Vec2, // Saves player_to_mouse_dir at the time of start of dash
+
     camera: rl.Camera2D,
+
     spirit_mode_on: bool,
     spirits_should_attack: bool,
 }
@@ -31,7 +35,13 @@ GameplayState :: enum {
     PauseForText, // Pausing for tutorial text
 }
 
+// General purpose stopwatch (Used for intro & texts)
 stopwatch := time.Stopwatch{}
+
+// Stopwatch for the player dash, and it's cooldown
+player_dash_stopwatch := time.Stopwatch{}
+DASH_DURATION :: time.Duration(0.1 *  f32(time.Second))
+DASH_COOLDOWN :: time.Duration(1   *  f32(time.Second))
 
 tutorial_text_counter := 0
 TUTORIAL_TEXTS :: [?]string{
@@ -61,9 +71,8 @@ init :: proc() {
         }
     }
     assets_init()
-    time.stopwatch_start(&stopwatch)
 }
-import "core:fmt"
+
 update :: proc() {
     switch g_state.menu_state {
         case .MainMenu: {
@@ -74,10 +83,53 @@ update :: proc() {
                 case .Gameplay: {
                     g_state.spirit_mode_on = false
                     dt := rl.GetFrameTime()
-                    if rl.IsKeyDown(.S) do g_state.player_hitbox.y += 100 * dt
-                    if rl.IsKeyDown(.W) do g_state.player_hitbox.y -= 100 * dt
-                    if rl.IsKeyDown(.D) do g_state.player_hitbox.x += 100 * dt
-                    if rl.IsKeyDown(.A) do g_state.player_hitbox.x -= 100 * dt
+                    g_state.player_to_mouse_dir = Vec2_GetNormal(
+                        Vec2_GetVectorTo(
+                            g_state.player_hitbox.xy,
+                            rl.GetScreenToWorld2D(rl.GetMousePosition(), g_state.camera)
+                        )
+                    )
+                    
+
+                    // Process movement input:
+                    {
+                        dash_in_progress := false
+                        if rl.IsKeyPressed(.SPACE) {
+                            // Start the dash only if it is not already running
+                            if player_dash_stopwatch.running == false {
+                                time.stopwatch_start(&player_dash_stopwatch)
+                                dash_in_progress = true
+                                g_state.player_dash_dir = g_state.player_to_mouse_dir
+                            }
+                        }
+
+                        if player_dash_stopwatch.running == true && time.stopwatch_duration(player_dash_stopwatch) <= DASH_DURATION {
+                            direction := Vec2_GetScaled(g_state.player_dash_dir, 350)
+
+                            g_state.player_hitbox.x += direction.x * dt
+                            g_state.player_hitbox.y += direction.y * dt
+                        }
+
+                        if time.stopwatch_duration(player_dash_stopwatch) >= DASH_COOLDOWN {
+                            time.stopwatch_reset(&player_dash_stopwatch)
+                            g_state.player_dash_dir = {}
+                        }
+                        
+                        if dash_in_progress == false {
+                            direction := Vec2{}
+                            if rl.IsKeyDown(.S) do direction.y =  1
+                            if rl.IsKeyDown(.W) do direction.y = -1
+                            if rl.IsKeyDown(.D) do direction.x =  1
+                            if rl.IsKeyDown(.A) do direction.x = -1
+
+                            Vec2_Scale(&direction, 100)
+    
+                            g_state.player_hitbox.x += direction.x * dt
+                            g_state.player_hitbox.y += direction.y * dt
+                        }
+                    }
+
+
                     if rl.IsKeyPressed(.ESCAPE) do g_state.menu_state = .Paused
 
                     g_state.spirits_should_attack = g_state.player_hitbox.y <= 800
@@ -86,8 +138,13 @@ update :: proc() {
                     g_state.camera.target.y = g_state.player_hitbox.y
                 }
                 case .IntroText: {
-                    // If stopwatch is started will do nothing.
+                    // If stopwatch is started, this will do nothing.
                     time.stopwatch_start(&stopwatch)
+
+                    if rl.IsKeyPressed(.S) {
+                        g_state.gameplay_state = .Gameplay
+                        time.stopwatch_reset(&stopwatch)
+                    }
 
                     // After a few seconds allow to skip
                     if time.stopwatch_duration(stopwatch) >= time.Duration(13 * time.Second) {
