@@ -6,7 +6,7 @@ import "../game"
 
 main :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
-	rl.InitWindow(1280, 720, "GoadWare 2025 01")
+	rl.InitWindow(1280, 720, "Shaman's journey")
 	defer rl.CloseWindow()
 
 	rl.SetTargetFPS(144)

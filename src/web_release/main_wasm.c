@@ -22,7 +22,7 @@ extern void game_frame();
 #define MEGABYTE
 
 int main(void) {
-  InitWindow(1280, 720, "SDun.exe");
+  InitWindow(1280, 720, "Shaman's journey.exe");
   char *game_state = (char *)malloc(Megabyte * 64);
   game_init(game_state);
 
@@ -33,7 +33,7 @@ int main(void) {
 // int main() {
 //   void *game_memory = malloc();
 //   // SetConfigFlags()
-//   InitWindow(1280, 720, "SDun");
+//   InitWindow(1280, 720, "Shaman's journey");
 
 //   game_init(game_memory);
 

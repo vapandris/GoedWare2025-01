@@ -77,4 +77,7 @@ water_tile_positions := [?]rl.Rectangle{
 // Shaman
 shaman_spiritOffsetX: f32 = 16.0
 shaman_sprite_position  := rl.Rectangle{ 0, 0, 16, 27}
-shaman_sprite_origin    := Vec2{0, -3}
+shaman_sprite_origin    := Vec2{8, 27/1.5}
+
+shaman_whack_position   := rl.Rectangle{0, 0, 4, 8}
+shaman_whack_origin     := Vec2{2.5, 8/2}

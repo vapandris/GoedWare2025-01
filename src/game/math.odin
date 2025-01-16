@@ -3,6 +3,11 @@ package game
 Vec2 :: [2]f32
 Vec4 :: [4]f32
 
+HitBox :: struct {
+    pos: Vec2,
+    radius: f32
+}
+
 // Vec2:
 Vec2_GetLength :: proc(v: Vec2) -> f32 {
     return sqrt(sq(v.x) + sq(v.y))

@@ -1,9 +1,12 @@
 package game
 
+// import "core:fmt"
 import rl "../../raylib"
 import "core:time"
+import "core:strings"
 
 ORANGE :: rl.Color{244, 96, 54, 255}
+YELLOW :: rl.Color{255, 210, 63, 255}
 
 RESOLUTION_HEIGHT: f32 : 180
 RESOLUTION_WIDTH : f32 : 320
@@ -18,10 +21,16 @@ MenuState :: enum {
 GameState :: struct {
     menu_state: MenuState,
     gameplay_state: GameplayState,
+    enter_tutorial: bool,
 
-    player_hitbox: Vec4,
+    player_hitbox: HitBox,
     player_to_mouse_dir: Vec2,
-    player_dash_dir: Vec2, // Saves player_to_mouse_dir at the time of start of dash
+    player_dash_dir: Vec2,   // Saves player_to_mouse_dir at the time of start of dash
+    player_attack_dir: Vec2, // Saves player_to_mouse_dir at the time of start of attack
+    player_attack_pos: Vec2,
+
+    spirits:     [dynamic]Spirit,
+    spiritHands: [dynamic]SpiritHand,
 
     camera: rl.Camera2D,
 
@@ -29,10 +38,40 @@ GameState :: struct {
     spirits_should_attack: bool,
 }
 
+PLAYER_PHYSICAL_ATTACK_RADIUS: f32 : 8/2
+PLAYER_SPIRIT_ATTACK_RADIUS:   f32 : 16/2
+
+SpiritVariant :: enum { Sad, Crazy }
+Spirit :: struct {
+    hitbox: HitBox,
+    variant: SpiritVariant,
+}
+SpiritHand :: struct {
+    hitbox: HitBox,
+    attack_stopwatch: time.Stopwatch,
+}
+
+spirit_spawner_stopwatch := time.Stopwatch{}
+
 GameplayState :: enum {
     IntroText,    // First X seconds of gameplay
     Gameplay,     // Active gameplay
     PauseForText, // Pausing for tutorial text
+}
+
+tutorial_text_counter := 0
+tutorial_texts := [?]string{
+    "Move around with AWSD, dodge danger with [space]",
+
+    "An angry spirit is attacking! Dodge with [space]!",
+
+    "Now whack it with [left click]!",
+
+    "You gained some spirit energy. Gather enough to enter the spirit world!",
+
+    "Press E to enter the spirit world for a limited time!",
+
+    "In the spirit world you can fight spirits face on! Good luck! :)",
 }
 
 // General purpose stopwatch (Used for intro & texts)
@@ -40,19 +79,13 @@ stopwatch := time.Stopwatch{}
 
 // Stopwatch for the player dash, and it's cooldown
 player_dash_stopwatch := time.Stopwatch{}
-DASH_DURATION :: time.Duration(0.1 *  f32(time.Second))
-DASH_COOLDOWN :: time.Duration(1   *  f32(time.Second))
+DASH_DURATION :: time.Duration(0.1 * f32(time.Second))
+DASH_COOLDOWN :: time.Duration(0.8 * f32(time.Second))
 
-tutorial_text_counter := 0
-TUTORIAL_TEXTS :: [?]string{
-    "Move around with AWSD, dodge danger with [space]",
-    "An angry spirit is attacking! Dodge with [space]!",
-    "Now whack it with [left click]!",
-    "You gained some spirit energy.",
-    "Gather enough to enter the spirit world!",
-    "Press E to enter the spirit world!",
-    "In the spirit world you can fight spirits face on! Good luck! :)",
-}
+// Stopwatch for attack, and it's cooldown
+player_attack_stopwatch := time.Stopwatch{}
+ATTACK_DURATON  :: time.Duration(0.15 * f32(time.Second))
+ATTACK_COOLDOWN :: time.Duration(0.50 * f32(time.Second))
 
 g_state: ^GameState
 
@@ -60,7 +93,8 @@ init :: proc() {
     g_state^ = GameState {
         menu_state = .MainMenu,
         gameplay_state = .IntroText,
-        player_hitbox = {PLAYER_START_POS.x, PLAYER_START_POS.y, shaman_sprite_position.width, shaman_sprite_position.height},
+        enter_tutorial = true,
+        player_hitbox = {{PLAYER_START_POS.x, PLAYER_START_POS.y}, 8},
         camera = {
             offset = Vec2{
                 cast(f32)rl.GetScreenWidth()  / 2,
@@ -81,41 +115,76 @@ update :: proc() {
         case .Game: {
             switch g_state.gameplay_state {
                 case .Gameplay: {
-                    g_state.spirit_mode_on = false
                     dt := rl.GetFrameTime()
                     g_state.player_to_mouse_dir = Vec2_GetNormal(
                         Vec2_GetVectorTo(
-                            g_state.player_hitbox.xy,
+                            g_state.player_hitbox.pos,
                             rl.GetScreenToWorld2D(rl.GetMousePosition(), g_state.camera)
                         )
                     )
-                    
 
-                    // Process movement input:
+                    if g_state.enter_tutorial {
+                        g_state.gameplay_state = .PauseForText
+                        time.stopwatch_reset(&stopwatch)
+                    }
+
+                    // Process player input:
                     {
-                        dash_in_progress := false
-                        if rl.IsKeyPressed(.SPACE) {
-                            // Start the dash only if it is not already running
-                            if player_dash_stopwatch.running == false {
+                        // Process dash
+                        stop_movement := false
+                        {
+                            // Start the dash only if it is not already in-progress/on-cooldown
+                            if rl.IsKeyPressed(.SPACE) && player_dash_stopwatch.running == false {
                                 time.stopwatch_start(&player_dash_stopwatch)
-                                dash_in_progress = true
                                 g_state.player_dash_dir = g_state.player_to_mouse_dir
+                            }
+
+                            // Dash is in-progress
+                            if time.stopwatch_duration(player_dash_stopwatch) <= DASH_DURATION  && player_dash_stopwatch.running == true {
+                                stop_movement = true
+                                time.stopwatch_start(&player_dash_stopwatch) // If there was a pause, we need to continue
+                                direction := Vec2_GetScaled(g_state.player_dash_dir, 350)
+
+                                g_state.player_hitbox.pos += direction * dt
+                            }
+
+                            // Dash is on cooldown
+                            if time.stopwatch_duration(player_dash_stopwatch) >= DASH_COOLDOWN {
+                                time.stopwatch_reset(&player_dash_stopwatch)
+
+                                g_state.player_dash_dir = {}
                             }
                         }
 
-                        if player_dash_stopwatch.running == true && time.stopwatch_duration(player_dash_stopwatch) <= DASH_DURATION {
-                            direction := Vec2_GetScaled(g_state.player_dash_dir, 350)
+                        // Process attack
+                        {
+                            // Start the attack only if it is not already in-progress/on-cooldown
+                            if rl.IsMouseButtonPressed(.LEFT) && player_attack_stopwatch.running == false {
+                                time.stopwatch_start(&player_attack_stopwatch)
+                                g_state.player_attack_dir = g_state.player_to_mouse_dir
+                            }
 
-                            g_state.player_hitbox.x += direction.x * dt
-                            g_state.player_hitbox.y += direction.y * dt
+                            // Attack is in-progress
+                            if time.stopwatch_duration(player_attack_stopwatch) <= ATTACK_DURATON && player_attack_stopwatch.running == true {
+                                g_state.player_attack_pos = g_state.player_hitbox.pos + Vec2_GetScaled(g_state.player_attack_dir, 12)
+                                stop_movement = true
+                            }
+
+                            // Attack is on cooldown
+                            if time.stopwatch_duration(player_attack_stopwatch) >= ATTACK_COOLDOWN {
+                                time.stopwatch_reset(&player_attack_stopwatch)
+
+                                g_state.player_attack_dir = {}
+                            }
                         }
 
-                        if time.stopwatch_duration(player_dash_stopwatch) >= DASH_COOLDOWN {
-                            time.stopwatch_reset(&player_dash_stopwatch)
-                            g_state.player_dash_dir = {}
+                        // Spirit mode stuff
+                        {
+                            if rl.IsKeyPressed(.E) do g_state.spirit_mode_on = !g_state.spirit_mode_on
                         }
                         
-                        if dash_in_progress == false {
+                        // Process basic movement
+                        if stop_movement == false {
                             direction := Vec2{}
                             if rl.IsKeyDown(.S) do direction.y =  1
                             if rl.IsKeyDown(.W) do direction.y = -1
@@ -124,38 +193,48 @@ update :: proc() {
 
                             Vec2_Scale(&direction, 100)
     
-                            g_state.player_hitbox.x += direction.x * dt
-                            g_state.player_hitbox.y += direction.y * dt
+                            g_state.player_hitbox.pos += direction * dt
                         }
                     }
 
 
-                    if rl.IsKeyPressed(.ESCAPE) do g_state.menu_state = .Paused
+                    if rl.IsKeyPressed(.ESCAPE) {
+                        g_state.menu_state = .Paused
+                        time.stopwatch_stop(&player_dash_stopwatch)
+                        time.stopwatch_stop(&player_attack_stopwatch)
+                    }
 
-                    g_state.spirits_should_attack = g_state.player_hitbox.y <= 800
+                    g_state.spirits_should_attack = g_state.player_hitbox.pos.y <= 800
                 
-                    g_state.camera.target.x = g_state.player_hitbox.x
-                    g_state.camera.target.y = g_state.player_hitbox.y
+                    g_state.camera.target = g_state.player_hitbox.pos
                 }
                 case .IntroText: {
                     // If stopwatch is started, this will do nothing.
                     time.stopwatch_start(&stopwatch)
 
-                    if rl.IsKeyPressed(.S) {
+                    //if rl.IsKeyPressed(.S) {
+                    //    g_state.gameplay_state = .Gameplay
+                    //    time.stopwatch_reset(&stopwatch)
+                    //}
+
+                    // After a few seconds allow to skip
+                    if time.stopwatch_duration(stopwatch) >= time.Duration(13 * time.Second) &&
+                       rl.IsKeyPressed(.SPACE) {
                         g_state.gameplay_state = .Gameplay
                         time.stopwatch_reset(&stopwatch)
                     }
-
-                    // After a few seconds allow to skip
-                    if time.stopwatch_duration(stopwatch) >= time.Duration(13 * time.Second) {
-                        if rl.IsKeyPressed(.SPACE) {
-                            g_state.gameplay_state = .Gameplay
-                            time.stopwatch_reset(&stopwatch)
-                        }
-                    }
                 }
                 case .PauseForText: {
+                    // If stopwatch is started, this will do nothing.
+                    time.stopwatch_start(&stopwatch)
 
+                    // After a few seconds allow to skip
+                    if time.stopwatch_duration(stopwatch) >= time.Duration(2 * time.Second) &&
+                       rl.IsKeyPressed(.SPACE) {
+                        g_state.gameplay_state = .Gameplay
+                        g_state.enter_tutorial = false
+                        time.stopwatch_reset(&stopwatch)
+                    }
                 }
             }
         }
@@ -231,18 +310,38 @@ draw :: proc() {
                                 {tile_pos.x, tile_pos.y, 16, 16},
                                 {}, 0, rl.WHITE
                             )
-                
-                            rl.DrawTexturePro(
-                                shaman_textr,
-                                {shaman_sprite_position.x + current_shaman_offset_x, shaman_sprite_position.y, shaman_sprite_position.width, shaman_sprite_position.height},
-                                {g_state.player_hitbox.x, g_state.player_hitbox.y, shaman_sprite_position.width, shaman_sprite_position.height},
-                                shaman_sprite_origin, 0, rl.WHITE
-                            )
-                
+
                             tile_pos.x += tile_size
                         }
                         tile_pos.x = 0
                         tile_pos.y += tile_size
+                    }
+
+                    attack_radius := PLAYER_PHYSICAL_ATTACK_RADIUS
+                    if g_state.spirit_mode_on do attack_radius = PLAYER_SPIRIT_ATTACK_RADIUS
+
+                    // Draw attack either above or bellow the player based on it's direction
+                    if time.stopwatch_duration(player_attack_stopwatch) <= ATTACK_DURATON && player_attack_stopwatch.running == true &&
+                       Vec2_GetVectorTo(g_state.player_hitbox.pos, g_state.player_attack_pos).y < 0 {
+                        rl.DrawCircle(
+                            i32(g_state.player_attack_pos.x), i32(g_state.player_attack_pos.y),
+                            attack_radius, rl.WHITE
+                        )
+                    }
+
+                    rl.DrawTexturePro(
+                        shaman_textr,
+                        {shaman_sprite_position.x + current_shaman_offset_x, shaman_sprite_position.y, shaman_sprite_position.width, shaman_sprite_position.height},
+                        {g_state.player_hitbox.pos.x, g_state.player_hitbox.pos.y, shaman_sprite_position.width, shaman_sprite_position.height},
+                        shaman_sprite_origin, 0, rl.WHITE
+                    )
+
+                    if time.stopwatch_duration(player_attack_stopwatch) <= ATTACK_DURATON && player_attack_stopwatch.running == true &&
+                       Vec2_GetVectorTo(g_state.player_hitbox.pos, g_state.player_attack_pos).y > 0 {
+                        rl.DrawCircle(
+                            i32(g_state.player_attack_pos.x), i32(g_state.player_attack_pos.y),
+                            attack_radius, rl.WHITE
+                        )
                     }
                 }
                 case .IntroText: {
@@ -259,9 +358,30 @@ draw :: proc() {
                 }
             }
 
-            if g_state.menu_state == .Paused {
+            if g_state.menu_state == .Paused || g_state.gameplay_state == .PauseForText {
                 rl.DrawRectangle(0, 0, rl.GetScreenWidth(), rl.GetScreenHeight(), rl.Color{0, 0, 0, 255/3})
+            }
 
+            if g_state.gameplay_state == .PauseForText {
+                if time.stopwatch_duration(stopwatch) >= time.Duration( 0.5 * f32(time.Second)) {
+                    rl.DrawText(
+                        strings.unsafe_string_to_cstring(tutorial_texts[tutorial_text_counter]),
+                        50, 70, 32, YELLOW
+                    )
+                     rl.DrawText(
+                        "Attack with [left click] and enter & leave spirit mode with E.",
+                        50, 120, 32, YELLOW
+                    )
+                    rl.DrawText(
+                        "Nothing else to do, it's not finished :/",
+                        50, 170, 32, YELLOW
+                    )
+                }
+                
+                if time.stopwatch_duration(stopwatch) >= time.Duration( 2 * time.Second) do rl.DrawText("Press [space] to continue", 100, 220, 32, rl.WHITE)
+            }
+            
+            if g_state.menu_state == .Paused {
                 rl.DrawText("Unpause with [Esc]", 10, 10, 32, rl.WHITE)
                 rl.DrawText("Exit with [Q]\n",    10, 50, 32, rl.WHITE)
             } else if g_state.gameplay_state == .Gameplay{
