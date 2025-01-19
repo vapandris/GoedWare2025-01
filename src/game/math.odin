@@ -5,7 +5,7 @@ Vec4 :: [4]f32
 
 HitBox :: struct {
     pos: Vec2,
-    radius: f32
+    r: f32, //radius
 }
 
 // Vec2:

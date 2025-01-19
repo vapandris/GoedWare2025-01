@@ -30,7 +30,6 @@ GameState :: struct {
     player_attack_pos: Vec2,
 
     spirits:     [dynamic]Spirit,
-    spiritHands: [dynamic]SpiritHand,
 
     camera: rl.Camera2D,
 
@@ -45,13 +44,55 @@ SpiritVariant :: enum { Sad, Crazy }
 Spirit :: struct {
     hitbox: HitBox,
     variant: SpiritVariant,
-}
-SpiritHand :: struct {
-    hitbox: HitBox,
     attack_stopwatch: time.Stopwatch,
+    attack_cooldown: time.Duration,
+    attack_direction: Vec2,
 }
 
-spirit_spawner_stopwatch := time.Stopwatch{}
+// Spirithand AI
+spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
+    follow_radius_inner:f32 = 36 // spirit will try to stay at this distance from the player
+    follow_radius_outer:f32 = 68 // spirit will not follow if player is further away
+    _ = follow_radius_outer
+
+    vec_to_player := Vec2_GetVectorTo(spirit.hitbox.pos, g_state.player_hitbox.pos)
+    length := Vec2_GetLength(vec_to_player)
+
+    // When the wpirit it far away, no need to do anything
+    if length >= follow_radius_outer {
+        return
+    }
+
+    // When the spirit is close enough to the hand, no need to move it around (prevent jiggling)
+    if abs(length - follow_radius_inner) < 1 {
+        return
+    }
+
+    Vec2_Normalize(&vec_to_player)
+    
+    // If the spirit is too far away, make it go closer
+    // If the spirit is too close, make it go backwards
+    vec_to_inner_radius := vec_to_player if (length >= follow_radius_inner) else vec_to_player * -1.0
+
+    Vec2_Scale(&vec_to_inner_radius, 100)
+    spirit.hitbox.pos += vec_to_inner_radius * dt
+
+    // Resolve collisions among spirits:
+    for &s in g_state.spirits {
+        // Can skip itself (both are pointers)
+        if spirit == &s {
+            break
+        }
+
+        v := Vec2_GetVectorTo(spirit.hitbox.pos, s.hitbox.pos) 
+        if Vec2_GetLength(v) < spirit.hitbox.r + s.hitbox.r {
+            overlap := (spirit.hitbox.r + s.hitbox.r) - Vec2_GetLength(v)
+
+            spirit.hitbox.pos += Vec2_GetScaled(-v, overlap/2)
+            s.hitbox.pos      += Vec2_GetScaled( v, overlap/2)
+        }
+    }
+}
 
 GameplayState :: enum {
     IntroText,    // First X seconds of gameplay
@@ -88,13 +129,19 @@ ATTACK_DURATON  :: time.Duration(0.15 * f32(time.Second))
 ATTACK_COOLDOWN :: time.Duration(0.50 * f32(time.Second))
 
 g_state: ^GameState
-
+//import "core:fmt"
+// ===========================================================================================================================
+// ===========================================================================================================================
+// ===========================================================================================================================
 init :: proc() {
     g_state^ = GameState {
         menu_state = .MainMenu,
         gameplay_state = .IntroText,
         enter_tutorial = true,
         player_hitbox = {{PLAYER_START_POS.x, PLAYER_START_POS.y}, 8},
+
+        spirits = [dynamic]Spirit{},
+
         camera = {
             offset = Vec2{
                 cast(f32)rl.GetScreenWidth()  / 2,
@@ -104,6 +151,24 @@ init :: proc() {
             zoom = cast(f32)rl.GetScreenWidth() / RESOLUTION_WIDTH,
         }
     }
+    now := time.now()
+    h, m, s := time.clock_from_time(now)
+    rl.SetRandomSeed(u32(h*60*60 + m*60 + s))
+
+    for spirit_pos in spirit_positions {
+        append(
+            &g_state.spirits,
+            Spirit{
+                hitbox = HitBox{
+                    pos = spirit_pos,
+                    r = 4,  
+                },
+                variant = .Sad if rl.GetRandomValue(0, 1) == 0 else .Crazy,
+                attack_cooldown = time.Duration(rl.GetRandomValue(3, 7)) * time.Second
+            }
+        )
+    }
+
     assets_init()
 }
 
@@ -197,6 +262,13 @@ update :: proc() {
                         }
                     }
 
+                    // Process spirit behaviour
+                    {
+                        for &spirit in g_state.spirits {
+                            spirit_do_physical_AI(&spirit, dt)
+                        }
+                    }
+
 
                     if rl.IsKeyPressed(.ESCAPE) {
                         g_state.menu_state = .Paused
@@ -212,10 +284,10 @@ update :: proc() {
                     // If stopwatch is started, this will do nothing.
                     time.stopwatch_start(&stopwatch)
 
-                    //if rl.IsKeyPressed(.S) {
-                    //    g_state.gameplay_state = .Gameplay
-                    //    time.stopwatch_reset(&stopwatch)
-                    //}
+                    if rl.IsKeyPressed(.S) {
+                        g_state.gameplay_state = .Gameplay
+                        time.stopwatch_reset(&stopwatch)
+                    }
 
                     // After a few seconds allow to skip
                     if time.stopwatch_duration(stopwatch) >= time.Duration(13 * time.Second) &&
@@ -343,6 +415,13 @@ draw :: proc() {
                             attack_radius, rl.WHITE
                         )
                     }
+
+                    for spirit in g_state.spirits {
+                        rl.DrawCircle(
+                            i32(spirit.hitbox.pos.x), i32(spirit.hitbox.pos.y),
+                            spirit.hitbox.r, rl.BLACK
+                        )
+                    }
                 }
                 case .IntroText: {
                     if time.stopwatch_duration(stopwatch) >= time.Duration( 1 * time.Second) do rl.DrawText("Lately.. the spirits have gone crazy. The whole world has.", 50, 70, 32,  ORANGE)
@@ -390,3 +469,4 @@ draw :: proc() {
         }
     }
 }
+

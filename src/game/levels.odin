@@ -5,6 +5,19 @@ package game
 
 // Tutorial:
 PLAYER_START_POS :: Vec2{390, 912}
+spirit_positions := [?]Vec2{
+    {390, 912 - 10*16}, // 10 tile above the player start pos (and so on)
+    
+    {360, 912 - 18*16},
+    {420, 912 - 18*16},
+
+    {310, 912 - 26*16},
+    {360, 912 - 25*16},
+    {350, 912 - 27*16},
+
+    {600, 912 - 24*16},
+    {612, 912 - 29*16},
+}
 lvl0 := [?]string {
     "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
     "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
