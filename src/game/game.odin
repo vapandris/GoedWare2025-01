@@ -58,6 +58,22 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
     vec_to_player := Vec2_GetVectorTo(spirit.hitbox.pos, g_state.player_hitbox.pos)
     length := Vec2_GetLength(vec_to_player)
 
+    // Resolve collisions among spirits:
+    for &s in g_state.spirits {
+        // Can skip itself (both are pointers)
+        if spirit == &s {
+            continue
+        }
+
+        v := Vec2_GetVectorTo(spirit.hitbox.pos, s.hitbox.pos)
+        if Vec2_GetLength(v) < spirit.hitbox.r + s.hitbox.r {
+            overlap := (spirit.hitbox.r + s.hitbox.r) - Vec2_GetLength(v)
+
+            spirit.hitbox.pos += Vec2_GetScaled(-v, overlap/2)
+            s.hitbox.pos      += Vec2_GetScaled( v, overlap/2)
+        }
+    }
+
     // When the wpirit it far away, no need to do anything
     if length >= follow_radius_outer {
         return
@@ -76,22 +92,6 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
 
     Vec2_Scale(&vec_to_inner_radius, 100)
     spirit.hitbox.pos += vec_to_inner_radius * dt
-
-    // Resolve collisions among spirits:
-    for &s in g_state.spirits {
-        // Can skip itself (both are pointers)
-        if spirit == &s {
-            break
-        }
-
-        v := Vec2_GetVectorTo(spirit.hitbox.pos, s.hitbox.pos) 
-        if Vec2_GetLength(v) < spirit.hitbox.r + s.hitbox.r {
-            overlap := (spirit.hitbox.r + s.hitbox.r) - Vec2_GetLength(v)
-
-            spirit.hitbox.pos += Vec2_GetScaled(-v, overlap/2)
-            s.hitbox.pos      += Vec2_GetScaled( v, overlap/2)
-        }
-    }
 }
 
 GameplayState :: enum {
