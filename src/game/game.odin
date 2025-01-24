@@ -5,6 +5,8 @@ import rl "../../raylib"
 import "core:time"
 import "core:strings"
 
+import "core:fmt"
+
 ORANGE :: rl.Color{244, 96, 54, 255}
 YELLOW :: rl.Color{255, 210, 63, 255}
 
@@ -47,6 +49,8 @@ Spirit :: struct {
     attack_stopwatch: time.Stopwatch,
     attack_cooldown: time.Duration,
     attack_direction: Vec2,
+
+    vec_to_player: Vec2
 }
 
 // Spirithand AI
@@ -57,6 +61,32 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
 
     vec_to_player := Vec2_GetVectorTo(spirit.hitbox.pos, g_state.player_hitbox.pos)
     length := Vec2_GetLength(vec_to_player)
+
+    spirit_is_far := length >= follow_radius_outer
+    spirit_is_close_to_range := abs(length - follow_radius_inner) < 1
+
+    // When the wpirit it far away, no need to do anything
+    if !spirit_is_far {
+        Vec2_Normalize(&vec_to_player)
+        
+        // When the spirit is close enough to the radius-range, start circling the player
+        if spirit_is_close_to_range {
+            fmt.println(vec_to_player)
+            vec_to_player = Vec2{
+                vec_to_player.y,
+                -vec_to_player.x,
+            }
+            fmt.println(vec_to_player)
+        } else if length < follow_radius_inner {
+            // If the spirit is too close (and not circling), make it go backwards
+            vec_to_player *= -1
+        }
+    
+        Vec2_Scale(&vec_to_player, 100)
+        spirit.hitbox.pos += vec_to_player * dt
+    }
+
+    spirit.vec_to_player = vec_to_player
 
     // Resolve collisions among spirits:
     for &s in g_state.spirits {
@@ -73,25 +103,6 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
             s.hitbox.pos      += Vec2_GetScaled( v, overlap/2)
         }
     }
-
-    // When the wpirit it far away, no need to do anything
-    if length >= follow_radius_outer {
-        return
-    }
-
-    // When the spirit is close enough to the hand, no need to move it around (prevent jiggling)
-    if abs(length - follow_radius_inner) < 1 {
-        return
-    }
-
-    Vec2_Normalize(&vec_to_player)
-    
-    // If the spirit is too far away, make it go closer
-    // If the spirit is too close, make it go backwards
-    vec_to_inner_radius := vec_to_player if (length >= follow_radius_inner) else vec_to_player * -1.0
-
-    Vec2_Scale(&vec_to_inner_radius, 100)
-    spirit.hitbox.pos += vec_to_inner_radius * dt
 }
 
 GameplayState :: enum {
@@ -134,6 +145,7 @@ g_state: ^GameState
 // ===========================================================================================================================
 // ===========================================================================================================================
 init :: proc() {
+    fmt.println("Starting...")
     g_state^ = GameState {
         menu_state = .MainMenu,
         gameplay_state = .IntroText,
@@ -420,6 +432,13 @@ draw :: proc() {
                         rl.DrawCircle(
                             i32(spirit.hitbox.pos.x), i32(spirit.hitbox.pos.y),
                             spirit.hitbox.r, rl.BLACK
+                        )
+
+                        debug := Vec2_GetScaled(spirit.vec_to_player, 16)
+                        rl.DrawLine(
+                            i32(spirit.hitbox.pos.x), i32(spirit.hitbox.pos.y),
+                            i32(spirit.hitbox.pos.x + debug.x), i32(spirit.hitbox.pos.y + debug.y),
+                            rl.RED
                         )
                     }
                 }
