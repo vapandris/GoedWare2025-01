@@ -49,8 +49,6 @@ Spirit :: struct {
     attack_stopwatch: time.Stopwatch,
     attack_cooldown: time.Duration,
     attack_direction: Vec2,
-
-    vec_to_player: Vec2
 }
 
 // Spirithand AI
@@ -71,12 +69,10 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
         
         // When the spirit is close enough to the radius-range, start circling the player
         if spirit_is_close_to_range {
-            fmt.println(vec_to_player)
             vec_to_player = Vec2{
                 vec_to_player.y,
                 -vec_to_player.x,
             }
-            fmt.println(vec_to_player)
         } else if length < follow_radius_inner {
             // If the spirit is too close (and not circling), make it go backwards
             vec_to_player *= -1
@@ -85,8 +81,6 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
         Vec2_Scale(&vec_to_player, 100)
         spirit.hitbox.pos += vec_to_player * dt
     }
-
-    spirit.vec_to_player = vec_to_player
 
     // Resolve collisions among spirits:
     for &s in g_state.spirits {
@@ -432,13 +426,6 @@ draw :: proc() {
                         rl.DrawCircle(
                             i32(spirit.hitbox.pos.x), i32(spirit.hitbox.pos.y),
                             spirit.hitbox.r, rl.BLACK
-                        )
-
-                        debug := Vec2_GetScaled(spirit.vec_to_player, 16)
-                        rl.DrawLine(
-                            i32(spirit.hitbox.pos.x), i32(spirit.hitbox.pos.y),
-                            i32(spirit.hitbox.pos.x + debug.x), i32(spirit.hitbox.pos.y + debug.y),
-                            rl.RED
                         )
                     }
                 }
