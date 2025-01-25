@@ -46,9 +46,12 @@ SpiritVariant :: enum { Sad, Crazy }
 Spirit :: struct {
     hitbox: HitBox,
     variant: SpiritVariant,
-    attack_stopwatch: time.Stopwatch,
-    attack_cooldown: time.Duration,
     attack_direction: Vec2,
+    // Stopwatch for the attack process (warning & attacking after that)
+    attack_stopwatch: time.Stopwatch,
+    cooldown_stopwatch: time.Stopwatch,
+
+    attack_cooldown: time.Duration,
 }
 
 // Spirithand AI
@@ -65,10 +68,20 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
 
     // When the wpirit it far away, no need to do anything
     if !spirit_is_far {
+        attack_is_off_cooldown := time.stopwatch_duration(spirit.cooldown_stopwatch) > spirit.attack_cooldown
+
+        //fmt.println(time.stopwatch_duration(spirit.cooldown_stopwatch))
+
         Vec2_Normalize(&vec_to_player)
         
         // When the spirit is close enough to the radius-range, start circling the player
+        // Also attack the player when the cooldown allows
         if spirit_is_close_to_range {
+            if attack_is_off_cooldown {
+                time.stopwatch_reset(&spirit.cooldown_stopwatch)
+                time.stopwatch_start(&spirit.cooldown_stopwatch)
+                fmt.println("Attaaaaack!")
+            }
             vec_to_player = Vec2{
                 vec_to_player.y,
                 -vec_to_player.x,
@@ -162,17 +175,20 @@ init :: proc() {
     rl.SetRandomSeed(u32(h*60*60 + m*60 + s))
 
     for spirit_pos in spirit_positions {
-        append(
-            &g_state.spirits,
-            Spirit{
-                hitbox = HitBox{
-                    pos = spirit_pos,
-                    r = 4,  
-                },
-                variant = .Sad if rl.GetRandomValue(0, 1) == 0 else .Crazy,
-                attack_cooldown = time.Duration(rl.GetRandomValue(3, 7)) * time.Second
-            }
-        )
+        new_spirit := Spirit{
+            hitbox = HitBox{
+                pos = spirit_pos,
+                r = 4,  
+            },
+            variant = .Sad if rl.GetRandomValue(0, 1) == 0 else .Crazy,
+            attack_cooldown = time.Duration(rl.GetRandomValue(3, 7)) * time.Second,
+            attack_stopwatch = time.Stopwatch{},
+            cooldown_stopwatch = time.Stopwatch{},
+        }
+        time.stopwatch_start(&new_spirit.attack_stopwatch)
+        time.stopwatch_start(&new_spirit.cooldown_stopwatch)
+
+        append(&g_state.spirits, new_spirit)
     }
 
     assets_init()
