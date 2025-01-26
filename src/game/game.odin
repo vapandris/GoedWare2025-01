@@ -52,19 +52,29 @@ Spirit :: struct {
     cooldown_stopwatch: time.Stopwatch,
 
     attack_cooldown: time.Duration,
+    saved_player_pos: Vec2, // Saves player position when starting an attack
+    first_frame_of_attack: bool,
+    attacked_player: bool,
+    got_attacked: bool,
 }
+
+// Between the time that the attack has been declared by a spirit and the time that this Duration is over, a warnign will be displayed
+// After this duration is over, the spirit attacks (a saved position of the player)
+SPIRIT_WARNING_DURATION :: time.Duration(0.75 * f32(time.Second))
+SPIRIT_ATTACK_DURATION  :: time.Duration(1.5 * f32(time.Second))
 
 // Spirithand AI
 spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
-    follow_radius_inner:f32 = 36 // spirit will try to stay at this distance from the player
-    follow_radius_outer:f32 = 68 // spirit will not follow if player is further away
+    follow_radius_inner:f32 = 48 // spirit will try to stay at this distance from the player
+    follow_radius_outer:f32 = 120 // spirit will not follow if player is further away
     _ = follow_radius_outer
 
+    spirit_speed := f32(150)
     vec_to_player := Vec2_GetVectorTo(spirit.hitbox.pos, g_state.player_hitbox.pos)
     length := Vec2_GetLength(vec_to_player)
 
     spirit_is_far := length >= follow_radius_outer
-    spirit_is_close_to_range := abs(length - follow_radius_inner) < 1
+    spirit_is_close_to_range := abs(length - follow_radius_inner) < 2
 
     // When the wpirit it far away, no need to do anything
     if !spirit_is_far {
@@ -80,18 +90,61 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
             if attack_is_off_cooldown {
                 time.stopwatch_reset(&spirit.cooldown_stopwatch)
                 time.stopwatch_start(&spirit.cooldown_stopwatch)
-                fmt.println("Attaaaaack!")
+
+                time.stopwatch_reset(&spirit.attack_stopwatch)
+                time.stopwatch_start(&spirit.attack_stopwatch)
+
+                spirit.first_frame_of_attack = true
+                spirit.attacked_player = false
+                spirit.got_attacked = false
             }
-            vec_to_player = Vec2{
-                vec_to_player.y,
-                -vec_to_player.x,
+            
+            if !spirit.attack_stopwatch.running {
+                vec_to_player = Vec2{
+                    vec_to_player.y,
+                    -vec_to_player.x,
+                }
+                spirit_speed = 75
+            } else {
+                spirit_speed = 0
             }
         } else if length < follow_radius_inner {
             // If the spirit is too close (and not circling), make it go backwards
             vec_to_player *= -1
         }
+
+        // Attack toward player's saved location
+        if time.stopwatch_duration(spirit.attack_stopwatch) > SPIRIT_WARNING_DURATION {
+            if spirit.first_frame_of_attack {
+                spirit.saved_player_pos = g_state.player_hitbox.pos + (Vec2_GetVectorTo(spirit.hitbox.pos, g_state.player_hitbox.pos)*0.35)
+                spirit.first_frame_of_attack = false
+            }
+
+            if !spirit.attacked_player {
+                if Vec2_GetDistance(spirit.hitbox.pos, g_state.player_hitbox.pos) < spirit.hitbox.r + g_state.player_hitbox.r {
+                    spirit.attacked_player = true
+                    fmt.println("A hit")
+                }
+            }
+
+            if !spirit.got_attacked {
+                attack_radius := PLAYER_PHYSICAL_ATTACK_RADIUS
+                if g_state.spirit_mode_on do attack_radius = PLAYER_SPIRIT_ATTACK_RADIUS
+                if Vec2_GetDistance(spirit.hitbox.pos, g_state.player_attack_pos) < spirit.hitbox.r + attack_radius {
+                    spirit.got_attacked = true
+                    fmt.println("Spirit got hit")
+                }
+            }
+            vec_to_player = Vec2_GetNormal(Vec2_GetVectorTo(spirit.hitbox.pos, spirit.saved_player_pos))
+            
+            // If the spirit is already at the saved target location, stay there untill the stopwatch is done
+            spirit_speed = 200 if Vec2_GetDistance(spirit.hitbox.pos, spirit.saved_player_pos) > 5 else 0
+        }
+        if time.stopwatch_duration(spirit.attack_stopwatch) > SPIRIT_ATTACK_DURATION {
+            time.stopwatch_reset(&spirit.attack_stopwatch)
+        }
     
-        Vec2_Scale(&vec_to_player, 100)
+        Vec2_Scale(&vec_to_player, spirit_speed)
         spirit.hitbox.pos += vec_to_player * dt
     }
 
@@ -278,7 +331,7 @@ update :: proc() {
                             if rl.IsKeyDown(.D) do direction.x =  1
                             if rl.IsKeyDown(.A) do direction.x = -1
 
-                            Vec2_Scale(&direction, 100)
+                            Vec2_Scale(&direction, 75)
     
                             g_state.player_hitbox.pos += direction * dt
                         }
@@ -443,6 +496,14 @@ draw :: proc() {
                             i32(spirit.hitbox.pos.x), i32(spirit.hitbox.pos.y),
                             spirit.hitbox.r, rl.BLACK
                         )
+
+                        // Draw warning
+                        if spirit.attack_stopwatch.running && time.stopwatch_duration(spirit.attack_stopwatch) <= SPIRIT_WARNING_DURATION {
+                            rl.DrawCircle(
+                                i32(spirit.hitbox.pos.x), i32(spirit.hitbox.pos.y),
+                                spirit.hitbox.r, rl.RED
+                            )
+                        }
                     }
                 }
                 case .IntroText: {
