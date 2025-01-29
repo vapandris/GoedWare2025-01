@@ -30,6 +30,7 @@ GameState :: struct {
     player_dash_dir: Vec2,   // Saves player_to_mouse_dir at the time of start of dash
     player_attack_dir: Vec2, // Saves player_to_mouse_dir at the time of start of attack
     player_attack_pos: Vec2,
+    player_spirit_energy: f32, // Gains 1.5 when hitting a spirit. Decreases constantly to 0. When above 3.0, can switch to spirit mode. (or something like that)
 
     spirits:     [dynamic]Spirit,
 
@@ -133,6 +134,7 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
                 if Vec2_GetDistance(spirit.hitbox.pos, g_state.player_attack_pos) < spirit.hitbox.r + attack_radius {
                     spirit.got_attacked = true
                     fmt.println("Spirit got hit")
+                    g_state.player_spirit_energy += 1.5
                 }
             }
             vec_to_player = Vec2_GetNormal(Vec2_GetVectorTo(spirit.hitbox.pos, spirit.saved_player_pos))
@@ -266,6 +268,13 @@ update :: proc() {
                     if g_state.enter_tutorial {
                         g_state.gameplay_state = .PauseForText
                         time.stopwatch_reset(&stopwatch)
+                    }
+
+                    // Spirit energy upkeep:
+                    {
+                        g_state.player_spirit_energy -= 0.12 * dt // roughly -1 point every 10 seconds
+                        if g_state.player_spirit_energy < 0 do g_state.player_spirit_energy = 0
+                        fmt.println("E: ", g_state.player_spirit_energy)
                     }
 
                     // Process player input:
