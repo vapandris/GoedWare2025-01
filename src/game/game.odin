@@ -63,7 +63,7 @@ Spirit :: struct {
 // After this duration is over, the spirit attacks (a saved position of the player)
 SPIRIT_WARNING_DURATION         :: time.Duration(0.75 * f32(time.Second))
 SPIRIT_SAVE_PLAYER_POS_DURATION :: time.Duration(1.25 * f32(time.Second))
-SPIRIT_ATTACK_DURATION          :: time.Duration(1.75 * f32(time.Second))
+SPIRIT_ATTACK_DURATION          :: time.Duration(2.25 * f32(time.Second))
 
 // Spirithand AI
 spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
@@ -123,13 +123,9 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
                 spirit.player_pos_saved = true
             }
 
-            if !spirit.attacked_player {
-                if Vec2_GetDistance(spirit.hitbox.pos, g_state.player_hitbox.pos) < spirit.hitbox.r + g_state.player_hitbox.r {
-                    spirit.attacked_player = true
-                    fmt.println("A hit")
-                }
-            }
-
+            // Check for attacks:
+            // - if the spirit got hit, it cannot hit back
+            // - the player can hit back after getting hit (also gains energy)
             if !spirit.got_attacked {
                 attack_radius := PLAYER_PHYSICAL_ATTACK_RADIUS
                 if g_state.spirit_mode_on do attack_radius = PLAYER_SPIRIT_ATTACK_RADIUS
@@ -137,6 +133,11 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
                     spirit.got_attacked = true
                     fmt.println("Spirit got hit")
                     g_state.player_spirit_energy += 1.5
+                }
+            } else if !spirit.attacked_player {
+                if Vec2_GetDistance(spirit.hitbox.pos, g_state.player_hitbox.pos) < spirit.hitbox.r + g_state.player_hitbox.r {
+                    spirit.attacked_player = true
+                    fmt.println("A hit")
                 }
             }
             vec_to_player = Vec2_GetNormal(Vec2_GetVectorTo(spirit.hitbox.pos, spirit.saved_player_pos))
@@ -506,17 +507,33 @@ draw :: proc() {
                     }
 
                     for spirit in g_state.spirits {
-                        rl.DrawCircle(
-                            i32(spirit.hitbox.pos.x), i32(spirit.hitbox.pos.y),
-                            spirit.hitbox.r, rl.BLACK
-                        )
-
-                        // Draw warning
-                        if spirit.attack_stopwatch.running && time.stopwatch_duration(spirit.attack_stopwatch) <= SPIRIT_WARNING_DURATION {
-                            rl.DrawCircle(
-                                i32(spirit.hitbox.pos.x), i32(spirit.hitbox.pos.y),
-                                spirit.hitbox.r, rl.RED
+                        if g_state.spirit_mode_on {
+                            rl.DrawTexturePro(
+                                spirit_textrs[spirit.variant],
+                                spirit_position,
+                                {spirit.hitbox.pos.x, spirit.hitbox.pos.y, spirit_position.width, spirit_position.height},
+                                spirit_origin, 0, rl.WHITE
                             )
+                        } else {
+                            if spirit.attack_stopwatch.running && time.stopwatch_duration(spirit.attack_stopwatch) <= SPIRIT_WARNING_DURATION {
+                                rl.DrawTexturePro(
+                                    spirit_hand_warning_textr,
+                                    spirit_hand_warning_position,
+                                    {spirit.hitbox.pos.x, spirit.hitbox.pos.y, spirit_hand_warning_position.width, spirit_hand_warning_position.height},
+                                    spirit_hand_warning_origin,
+                                    0,
+                                    rl.WHITE
+                                )
+                            } else if spirit.attack_stopwatch.running && time.stopwatch_duration(spirit.attack_stopwatch) <= SPIRIT_ATTACK_DURATION {
+                                rl.DrawTexturePro(
+                                    spirit_hand_textr,
+                                    spirit_hand_position,
+                                    {spirit.hitbox.pos.x, spirit.hitbox.pos.y, spirit_hand_position.width, spirit_hand_position.height},
+                                    spirit_hand_origin,
+                                    0,
+                                    rl.WHITE
+                                )
+                            }
                         }
                     }
                 }
@@ -547,10 +564,6 @@ draw :: proc() {
                      rl.DrawText(
                         "Attack with [left click] and enter & leave spirit mode with E.",
                         50, 120, 32, YELLOW
-                    )
-                    rl.DrawText(
-                        "Nothing else to do, it's not finished :/",
-                        50, 170, 32, YELLOW
                     )
                 }
                 
