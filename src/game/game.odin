@@ -54,15 +54,16 @@ Spirit :: struct {
 
     attack_cooldown: time.Duration,
     saved_player_pos: Vec2, // Saves player position when starting an attack
-    first_frame_of_attack: bool,
+    player_pos_saved: bool,
     attacked_player: bool,
     got_attacked: bool,
 }
 
 // Between the time that the attack has been declared by a spirit and the time that this Duration is over, a warnign will be displayed
 // After this duration is over, the spirit attacks (a saved position of the player)
-SPIRIT_WARNING_DURATION :: time.Duration(0.75 * f32(time.Second))
-SPIRIT_ATTACK_DURATION  :: time.Duration(1.5 * f32(time.Second))
+SPIRIT_WARNING_DURATION         :: time.Duration(0.75 * f32(time.Second))
+SPIRIT_SAVE_PLAYER_POS_DURATION :: time.Duration(1.25 * f32(time.Second))
+SPIRIT_ATTACK_DURATION          :: time.Duration(1.75 * f32(time.Second))
 
 // Spirithand AI
 spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
@@ -95,7 +96,7 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
                 time.stopwatch_reset(&spirit.attack_stopwatch)
                 time.stopwatch_start(&spirit.attack_stopwatch)
 
-                spirit.first_frame_of_attack = true
+                spirit.player_pos_saved = false
                 spirit.attacked_player = false
                 spirit.got_attacked = false
             }
@@ -116,9 +117,10 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
 
         // Attack toward player's saved location
         if time.stopwatch_duration(spirit.attack_stopwatch) > SPIRIT_WARNING_DURATION {
-            if spirit.first_frame_of_attack {
-                spirit.saved_player_pos = g_state.player_hitbox.pos + (Vec2_GetVectorTo(spirit.hitbox.pos, g_state.player_hitbox.pos)*0.35)
-                spirit.first_frame_of_attack = false
+            if !spirit.player_pos_saved &&
+               time.stopwatch_duration(spirit.attack_stopwatch) > SPIRIT_SAVE_PLAYER_POS_DURATION {
+                spirit.saved_player_pos = g_state.player_hitbox.pos
+                spirit.player_pos_saved = true
             }
 
             if !spirit.attacked_player {
@@ -141,6 +143,10 @@ spirit_do_physical_AI :: proc(spirit: ^Spirit, dt: f32) {
             
             // If the spirit is already at the saved target location, stay there untill the stopwatch is done
             spirit_speed = 200 if Vec2_GetDistance(spirit.hitbox.pos, spirit.saved_player_pos) > 5 else 0
+            // Don't move for a while before attack
+            if time.stopwatch_duration(spirit.attack_stopwatch) <= SPIRIT_SAVE_PLAYER_POS_DURATION && spirit.attack_stopwatch.running {
+                spirit_speed = 0
+            }
         }
         if time.stopwatch_duration(spirit.attack_stopwatch) > SPIRIT_ATTACK_DURATION {
             time.stopwatch_reset(&spirit.attack_stopwatch)
@@ -274,7 +280,6 @@ update :: proc() {
                     {
                         g_state.player_spirit_energy -= 0.12 * dt // roughly -1 point every 10 seconds
                         if g_state.player_spirit_energy < 0 do g_state.player_spirit_energy = 0
-                        fmt.println("E: ", g_state.player_spirit_energy)
                     }
 
                     // Process player input:
