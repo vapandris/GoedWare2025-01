@@ -358,6 +358,20 @@ update :: proc() {
                         }
                     }
 
+                    // Resolve player collisions
+                    tile_size:f32 = 16.0
+                    tile_pos := Vec2{}
+                    for row in lvl0 {
+                        for char in row {
+                            // Only check for water-tiles & tiles that are close enough
+                            if 'A' <= char && char <= 'F' && Vec2_GetDistance(g_state.player_hitbox.pos, tile_pos) <= 30 {
+                                resolve_tilecollision(&g_state.player_hitbox, {tile_pos.x, tile_pos.y, tile_size, tile_size})
+                            }
+                            tile_pos.x += tile_size
+                        }
+                        tile_pos.x = 0
+                        tile_pos.y += tile_size
+                    }
 
                     if rl.IsKeyPressed(.ESCAPE) {
                         g_state.menu_state = .Paused

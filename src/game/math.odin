@@ -73,3 +73,7 @@ sqrt :: proc(num: f32) -> f32 {
 sq :: proc(num: f32) -> f32 {
     return num * num
 }
+
+clamp :: proc(bot: f32, top: f32, num: f32) -> f32 {
+    return max(bot, min(num, top))
+}
