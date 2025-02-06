@@ -1,6 +1,6 @@
 package game
 
-import rl "../../raylib"
+import rl "vendor:raylib"
 
 ASSETS_PATH :: "assets/"
 TITLE_PATH  :: ASSETS_PATH + "GW-title.png"
