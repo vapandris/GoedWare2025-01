@@ -534,13 +534,17 @@ draw :: proc() {
 						spirit_origin, 0, rl.WHITE,
 					)
 				} else {
+					angle := Vec2_GetAngle(
+						{0, 1},
+						Vec2_GetVectorTo(spirit.hitbox.pos, g_state.player_hitbox.pos),
+					)
 					if spirit.attack_stopwatch.running && time.stopwatch_duration(spirit.attack_stopwatch) <= SPIRIT_WARNING_DURATION {
 						rl.DrawTexturePro(
 							spirit_hand_warning_textr,
 							spirit_hand_warning_position,
 							{spirit.hitbox.pos.x, spirit.hitbox.pos.y, spirit_hand_warning_position.width, spirit_hand_warning_position.height},
 							spirit_hand_warning_origin,
-							0,
+							angle,
 							rl.WHITE,
 						)
 					} else if spirit.attack_stopwatch.running && time.stopwatch_duration(spirit.attack_stopwatch) <= SPIRIT_ATTACK_DURATION {
@@ -549,7 +553,7 @@ draw :: proc() {
 							spirit_hand_position,
 							{spirit.hitbox.pos.x, spirit.hitbox.pos.y, spirit_hand_position.width, spirit_hand_position.height},
 							spirit_hand_origin,
-							0,
+							angle,
 							rl.WHITE,
 						)
 					}

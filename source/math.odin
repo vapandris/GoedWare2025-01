@@ -1,5 +1,7 @@
 package game
 
+import "core:math/linalg"
+
 Vec2 :: [2]f32
 Vec4 :: [4]f32
 
@@ -49,6 +51,17 @@ Vec2_GetVectorTo :: proc(start: Vec2, end: Vec2) -> Vec2 {
 
 Vec2_GetDistance :: proc(p1: Vec2, p2: Vec2) -> f32 {
     return Vec2_GetLength(p1 - p2)
+}
+
+Vec2_GetAngle :: proc(v1: Vec2, v2: Vec2) -> (angle: f32) {
+    cross: f32 = linalg.cross(v1, v2)
+    angle = linalg.atan2(
+        abs(cross),
+        linalg.dot(v1, v2),
+    ) * 180 / linalg.PI
+    if cross < 0 do angle = 360 - angle
+    
+    return
 }
 
 // Math:
